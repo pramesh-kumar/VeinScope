@@ -1,5 +1,5 @@
 🩺 # **VeinScope**
-Health Application | Android + AI
+[Health Application | Android + AI]
 
 VeinScope is an AI-powered health monitoring Android application that captures images of veins and analyzes them for potential health insights. The app sends the captured image to an AI-based server, which processes it and returns relevant health information directly to the user's phone.
 
@@ -15,6 +15,7 @@ VeinScope is an AI-powered health monitoring Android application that captures i
 🔒 User data privacy and security ensured
 
 🛠️ # **Technologies Used**
+
 Frontend (Android App)
 Kotlin / Java
 
