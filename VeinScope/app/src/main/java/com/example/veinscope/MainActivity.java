@@ -1,7 +1,9 @@
 package com.example.veinscope;
+//import android.util.Log;
 
 import android.Manifest;
 import android.app.ProgressDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Button;
@@ -21,10 +23,13 @@ import com.karumi.dexter.MultiplePermissionsReport;
 import com.karumi.dexter.PermissionToken;
 import com.karumi.dexter.listener.PermissionRequest;
 import com.karumi.dexter.listener.multi.MultiplePermissionsListener;
+import org.json.JSONException;
+import org.json.JSONObject;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -42,13 +47,12 @@ public class MainActivity extends AppCompatActivity {
     private CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
 
     // Network components
-    private final OkHttpClient httpClient = new OkHttpClient();
+    private OkHttpClient httpClient;
     private ProgressDialog progressDialog;
 
-    // Server configuration (UPDATE THESE VALUES)
-
-    private static final String SERVER_IP = "172.19.4.132"; // Your computer's IP
-    private static final int SERVER_PORT = 8000;              // Python server port
+    // Server configuration (UPDATE THESE)
+    private static final String SERVER_IP = "172.18.41.181"; // Your PC's IP
+    private static final int SERVER_PORT = 8002;
     private static final String UPLOAD_ENDPOINT = "/upload";
 
     @Override
@@ -57,6 +61,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initializeViews();
+        setupHttpClient();
         setupPermissions();
     }
 
@@ -73,6 +78,15 @@ public class MainActivity extends AppCompatActivity {
         flipBtn.setOnClickListener(v -> flipCamera());
     }
 
+    private void setupHttpClient() {
+        httpClient = new OkHttpClient.Builder()
+                .connectTimeout(60, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
+                .build();
+    }
+
+
     private void setupPermissions() {
         Dexter.withContext(this)
                 .withPermissions(
@@ -86,15 +100,14 @@ public class MainActivity extends AppCompatActivity {
                         if (report.areAllPermissionsGranted()) {
                             startCamera();
                         } else {
-                            showToast("All permissions are required");
+                            showToast("All permissions required");
                         }
                     }
 
                     @Override
                     public void onPermissionRationaleShouldBeShown(
                             List<PermissionRequest> permissions,
-                            PermissionToken token
-                    ) {
+                            PermissionToken token) {
                         token.continuePermissionRequest();
                     }
                 }).check();
@@ -128,11 +141,11 @@ public class MainActivity extends AppCompatActivity {
 
     private void uploadToServer(File imageFile) {
         if (!imageFile.exists()) {
-            showToast("Image file not found");
+            showToast("File not found");
             return;
         }
 
-        progressDialog.show();
+        runOnUiThread(() -> progressDialog.show());
 
         RequestBody requestBody = new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -154,7 +167,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     progressDialog.dismiss();
                     showToast("Upload failed: " + e.getMessage());
-                    Log.e("NETWORK", "Upload error", e);
+                    Log.e("NETWORK", "Error: " + request.url(), e);
                 });
             }
 
@@ -164,16 +177,33 @@ public class MainActivity extends AppCompatActivity {
                     progressDialog.dismiss();
                     try {
                         if (response.isSuccessful()) {
-                            showToast("Upload successful!");
-                            Log.d("UPLOAD", "Server response: " + response.body().string());
+                            String responseBody = response.body().string();
+                            Log.d("UPLOAD-RESPONSE", responseBody);       // <<< dump it here
+                            JSONObject json = new JSONObject(responseBody);
+
+                            // Extract image URLs
+                            String capturedUrl = json.getString("captured_image_url");
+                            String resultUrl = json.getString("resultant_image_url");
+
+                            Log.d("UPLOAD-URLS",
+                                    "captured=" + capturedUrl + "   resultant=" + resultUrl);
+
+                            System.out.println(capturedUrl);
+                            System.out.println(resultUrl);
+
+
+                            // Launch ResponseActivity with URLs
+                            Intent intent = new Intent(MainActivity.this, ResponseActivity.class);
+                            intent.putExtra("CAPTURED_URL", capturedUrl);
+                            intent.putExtra("RESULT_URL", resultUrl);
+                            startActivity(intent);
+
                         } else {
-                            String error = response.body() != null ?
-                                    response.body().string() : "Unknown error";
                             showToast("Server error: " + response.code());
-                            Log.e("SERVER", "Error code: " + response.code() + " | " + error);
                         }
-                    } catch (IOException e) {
-                        Log.e("RESPONSE", "Error handling response", e);
+                    } catch (IOException | JSONException e) {
+                        Log.e("RESPONSE", "Error parsing response", e);
+                        showToast("Error processing response");
                     } finally {
                         response.close();
                     }
@@ -201,7 +231,7 @@ public class MainActivity extends AppCompatActivity {
                         this, cameraSelector, preview, imageCapture
                 );
             } catch (ExecutionException | InterruptedException e) {
-                Log.e("CAMERA", "Camera initialization failed", e);
+                Log.e("CAMERA", "Camera init failed", e);
                 showToast("Camera startup failed");
             }
         }, ContextCompat.getMainExecutor(this));
@@ -214,10 +244,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showToast(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, message, Toast.LENGTH_LONG).show();
     }
-
-
 }
-
-
